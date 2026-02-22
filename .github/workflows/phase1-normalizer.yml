@@ -1,0 +1,162 @@
+name: Phase 1 — Security Alert Normalizer
+
+on:
+  push:
+    paths:
+      - "phase1-normalizer/**"
+      - ".github/workflows/phase1-normalizer.yml"
+  pull_request:
+    paths:
+      - "phase1-normalizer/**"
+      - ".github/workflows/phase1-normalizer.yml"
+
+defaults:
+  run:
+    working-directory: phase1-normalizer
+
+env:
+  PYTHON_VERSION: "3.11"
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/phase1-normalizer
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: Lint and format
+  # ─────────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: phase1-normalizer/requirements.txt
+
+      - name: Install linting dependencies
+        run: pip install flake8 black
+
+      - name: Run flake8 — enforce PEP 8 style
+        run: flake8 . --max-line-length=100 --exclude=.venv,__pycache__,dist,build
+
+      - name: Run black — verify code is formatted
+        run: black --check --diff --line-length=100 .
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Static type checking
+  # ─────────────────────────────────────────────────────────────────────────
+  type-check:
+    name: Type Check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: phase1-normalizer/requirements.txt
+
+      - name: Install runtime and type-checking dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install mypy types-requests
+
+      - name: Run mypy — check static types
+        run: mypy src/ main.py --ignore-missing-imports --no-strict-optional
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: Security scanning (SAST + dependency audit)
+  # ─────────────────────────────────────────────────────────────────────────
+  security-sast:
+    name: Security Scanning (bandit + safety)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: phase1-normalizer/requirements.txt
+
+      - name: Install security scanning tools
+        run: pip install bandit safety
+
+      - name: Run bandit — static analysis for security issues
+        run: bandit -r src/ main.py -ll -ii
+
+      - name: Run safety — audit dependencies for known CVEs
+        run: safety check --file requirements.txt --full-report
+        continue-on-error: true  # advisory only; upgrade path may not exist
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 4: Test suite with coverage gate
+  # ─────────────────────────────────────────────────────────────────────────
+  test:
+    name: Test Suite (pytest + coverage ≥ 70%)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: phase1-normalizer/requirements.txt
+
+      - name: Install runtime and test dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run pytest with coverage report
+        run: |
+          pytest tests/ -v \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-coverage-report
+          path: phase1-normalizer/coverage.xml
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 5: Docker image build and smoke test
+  # ─────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker Build & Smoke Test
+    runs-on: ubuntu-latest
+    needs: [lint, type-check, test]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (multi-stage)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./phase1-normalizer
+          file: ./phase1-normalizer/Dockerfile
+          push: false
+          load: true
+          tags: phase1-normalizer:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — verify container starts and runs --demo
+        run: |
+          docker run --rm phase1-normalizer:ci --demo

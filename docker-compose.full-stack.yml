@@ -1,0 +1,114 @@
+# Security Automation Portfolio — Full Stack
+#
+# Runs all four phases together for local development and integration testing.
+#
+# Usage:
+#   docker compose -f docker-compose.full-stack.yml up -d
+#   docker compose -f docker-compose.full-stack.yml logs -f
+#   docker compose -f docker-compose.full-stack.yml down
+#
+# Environment:
+#   Copy .env.example to .env and fill in your API keys before running.
+
+version: "3.9"
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart-policy: &default-restart
+  restart: unless-stopped
+
+services:
+  # ── Phase 1: Security Alert Normalizer ─────────────────────────────────────
+  phase1-normalizer:
+    build:
+      context: ./phase1-normalizer
+      dockerfile: Dockerfile
+    image: phase1-normalizer:dev
+    container_name: phase1-normalizer
+    <<: *default-restart
+    environment:
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - phase1-output:/app/output
+    command: ["--demo"]
+    logging: *default-logging
+    profiles:
+      - normalizer
+      - full
+
+  # ── Phase 2: Splunk Log Ingestion Pipeline ──────────────────────────────────
+  phase2-splunk-pipeline:
+    build:
+      context: ./phase2-splunk-pipeline
+      dockerfile: Dockerfile
+    image: phase2-splunk-pipeline:dev
+    container_name: phase2-splunk-pipeline
+    <<: *default-restart
+    environment:
+      SPLUNK_HEC_URL: ${SPLUNK_HEC_URL:-}
+      SPLUNK_HEC_TOKEN: ${SPLUNK_HEC_TOKEN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: ["main.py", "--demo"]
+    logging: *default-logging
+    profiles:
+      - splunk
+      - full
+
+  # ── Phase 3: SOAR Incident Response Playbook ────────────────────────────────
+  phase3-soar-playbook:
+    build:
+      context: ./phase3-soar-playbook
+      dockerfile: Dockerfile
+    image: phase3-soar-playbook:dev
+    container_name: phase3-soar-playbook
+    <<: *default-restart
+    environment:
+      SHUFFLE_URL: ${SHUFFLE_URL:-}
+      SHUFFLE_API_KEY: ${SHUFFLE_API_KEY:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    command: ["main.py", "--demo"]
+    logging: *default-logging
+    profiles:
+      - soar
+      - full
+
+  # ── Phase 4: API Integration Hub (FastAPI) ──────────────────────────────────
+  phase4-integration-hub:
+    build:
+      context: ./phase4-integration-hub
+      dockerfile: Dockerfile
+    image: phase4-integration-hub:dev
+    container_name: phase4-integration-hub
+    <<: *default-restart
+    ports:
+      - "8000:8000"
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
+      API_KEY: ${API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging: *default-logging
+    profiles:
+      - api
+      - full
+
+volumes:
+  phase1-output:
+    driver: local
+
+networks:
+  default:
+    name: security-automation-network

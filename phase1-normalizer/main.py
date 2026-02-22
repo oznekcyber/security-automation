@@ -44,7 +44,6 @@ from src.transformers.normalizer import (
 from src.transformers.schema import IndicatorType, NormalizedAlert
 from src.outputs.webhook import send_webhook
 
-
 logger = get_logger(__name__)
 
 
@@ -125,6 +124,7 @@ MOCK_ABUSE_RESPONSE: dict = {
 # ---------------------------------------------------------------------------
 # Core pipeline
 # ---------------------------------------------------------------------------
+
 
 def run_pipeline(cfg: Config, jq_expression: Optional[str] = None) -> list[NormalizedAlert]:
     """
@@ -216,6 +216,7 @@ def run_demo(jq_expression: Optional[str] = None) -> list[NormalizedAlert]:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(

@@ -1,0 +1,178 @@
+name: Security Scanning — All Phases
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run nightly at 02:00 UTC to catch newly published CVEs
+    - cron: "0 2 * * *"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: Secret detection — fail the build on any hardcoded credential
+  # ─────────────────────────────────────────────────────────────────────────
+  detect-secrets:
+    name: Detect Hardcoded Secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history so detect-secrets can diff
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets
+
+      - name: Scan repository for hardcoded secrets
+        run: |
+          detect-secrets scan \
+            --exclude-files '\.env\.example$' \
+            --exclude-files '\.git/.*' \
+            > /tmp/secrets-baseline.json
+          detect-secrets audit /tmp/secrets-baseline.json --report --fail-on-unaudited || true
+          python -c "
+          import json, sys
+          with open('/tmp/secrets-baseline.json') as f:
+              baseline = json.load(f)
+          results = baseline.get('results', {})
+          if results:
+              print('CRITICAL: Potential secrets detected in the following files:')
+              for path, secrets in results.items():
+                  print(f'  {path}: {len(secrets)} finding(s)')
+              sys.exit(1)
+          else:
+              print('No secrets detected.')
+          "
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Trivy — scan Docker images for CVEs (CRITICAL and HIGH only block)
+  # ─────────────────────────────────────────────────────────────────────────
+  trivy-scan-phase1:
+    name: Trivy CVE Scan — Phase 1 Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Phase 1 image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: ./phase1-normalizer
+          file: ./phase1-normalizer/Dockerfile
+          push: false
+          load: true
+          tags: phase1-normalizer:scan
+
+      - name: Run Trivy vulnerability scan — CRITICAL severity blocks build
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: phase1-normalizer:scan
+          format: table
+          exit-code: "1"
+          severity: CRITICAL
+          vuln-type: os,library
+
+      - name: Run Trivy vulnerability scan — HIGH severity is advisory
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: phase1-normalizer:scan
+          format: sarif
+          output: trivy-phase1.sarif
+          severity: HIGH
+          vuln-type: os,library
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF report
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-phase1.sarif
+          category: trivy-phase1
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: OWASP Dependency Check — comprehensive dependency vulnerability audit
+  # ─────────────────────────────────────────────────────────────────────────
+  owasp-dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@1.1.0
+        with:
+          project: security-automation-portfolio
+          path: .
+          format: HTML
+          args: >-
+            --failOnCVSS 7
+            --enableRetired
+        continue-on-error: true  # NVD database updates may be slow on first run
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-dependency-check-report
+          path: reports/
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 4: Validate no API keys or credentials exist in source code
+  # ─────────────────────────────────────────────────────────────────────────
+  validate-no-credentials:
+    name: Validate No API Keys in Source Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for common credential patterns
+        run: |
+          set +e
+          FAILED=0
+
+          echo "Checking for hardcoded API keys and credentials..."
+
+          # Patterns that indicate hardcoded credentials (not placeholder values)
+          PATTERNS=(
+            "api_key\s*=\s*['\"][a-zA-Z0-9]{20,}['\"]"
+            "apikey\s*=\s*['\"][a-zA-Z0-9]{20,}['\"]"
+            "secret\s*=\s*['\"][a-zA-Z0-9]{20,}['\"]"
+            "password\s*=\s*['\"][^'\"]{8,}['\"]"
+            "AWS_SECRET_ACCESS_KEY\s*=\s*['\"][^'\"]{20,}['\"]"
+            "GITHUB_TOKEN\s*=\s*['\"][a-zA-Z0-9_]{20,}['\"]"
+          )
+
+          EXCLUDE_PATHS="--exclude-dir=.git --exclude-dir=.venv --exclude=*.example"
+
+          for pattern in "${PATTERNS[@]}"; do
+            MATCHES=$(grep -rEi "$pattern" . $EXCLUDE_PATHS \
+              --exclude="*.md" --exclude="*.txt" 2>/dev/null || true)
+            if [ -n "$MATCHES" ]; then
+              echo "WARNING: Potential credential pattern found: $pattern"
+              echo "$MATCHES"
+              FAILED=1
+            fi
+          done
+
+          if [ $FAILED -eq 1 ]; then
+            echo ""
+            echo "CRITICAL: Potential hardcoded credentials detected."
+            echo "Use environment variables or a secrets manager instead."
+            exit 1
+          fi
+
+          echo "No hardcoded credential patterns detected."

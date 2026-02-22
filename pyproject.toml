@@ -1,0 +1,75 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | __pycache__
+  | dist
+  | build
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+no_strict_optional = true
+warn_unused_ignores = false
+exclude = [
+    "venv",
+    ".venv",
+    "dist",
+    "build",
+]
+
+[tool.pytest.ini_options]
+addopts = "-v --tb=short"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__pycache__/*",
+    ".venv/*",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
+
+[tool.bandit]
+exclude_dirs = [".venv", "venv", "dist", "build", "__pycache__"]
+skips = []
+# B101: assert_used — acceptable in tests
+# B311: random — not used for security here
+
+[tool.flake8]
+max-line-length = 100
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "dist",
+    "build",
+]
+extend-ignore = [
+    "E203",  # whitespace before ':' — conflicts with black
+    "W503",  # line break before binary operator — conflicts with black
+]
+per-file-ignores = [
+    "tests/*:S101",  # assert statements allowed in tests
+]

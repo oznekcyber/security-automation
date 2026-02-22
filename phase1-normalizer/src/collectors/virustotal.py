@@ -80,9 +80,7 @@ def _get_with_rate_limit(
             try:
                 return resp.json()
             except ValueError as exc:
-                raise ValueError(
-                    f"VT returned non-JSON body for {url}: {exc}"
-                ) from exc
+                raise ValueError(f"VT returned non-JSON body for {url}: {exc}") from exc
 
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", 60))
@@ -97,9 +95,7 @@ def _get_with_rate_limit(
             continue
 
         if resp.status_code == 401:
-            raise PermissionError(
-                "VirusTotal API key is invalid or expired (HTTP 401)."
-            )
+            raise PermissionError("VirusTotal API key is invalid or expired (HTTP 401).")
 
         if resp.status_code == 404:
             logger.info("VT returned 404 for %s — indicator not in database", url)
