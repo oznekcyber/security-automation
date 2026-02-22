@@ -1,0 +1,219 @@
+<dashboard version="1.1">
+  <label>Phase 2 – Security Operations Dashboard</label>
+  <description>Real-time overview of SSH attacks, suspicious processes, C2 beaconing, and threat-intel IOC matches ingested by the Phase 2 Splunk pipeline.</description>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       Row 1 – Summary KPI panels
+       ════════════════════════════════════════════════════════════════════════ -->
+  <row>
+    <panel>
+      <title>Total Alerts (Last 24 h)</title>
+      <single>
+        <search>
+          <query>index=security_events OR index=threat_intel earliest=-24h
+| stats count as total_alerts</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x65a637","0xf8be34","0xd93f3c"]</option>
+        <option name="rangeValues">[0,100,500]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+
+    <panel>
+      <title>Critical Alerts (Last 24 h)</title>
+      <single>
+        <search>
+          <query>index=security_events OR index=threat_intel earliest=-24h severity=critical
+| stats count</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="rangeColors">["0x65a637","0xf8be34","0xd93f3c"]</option>
+        <option name="rangeValues">[0,1,10]</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+
+    <panel>
+      <title>Unique Attacking IPs (Last 24 h)</title>
+      <single>
+        <search>
+          <query>index=security_events sourcetype="syslog:ssh" event_type="ssh_failed_login" earliest=-24h
+| stats dc(src_ip) as unique_ips</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+      </single>
+    </panel>
+
+    <panel>
+      <title>MTTR Simulation – Mean Time to Detect (minutes)</title>
+      <single>
+        <search>
+          <!-- Simulates MTTD: time from first event in a burst to first alert trigger.
+               In a live deployment replace with eval on real alert acknowledgement timestamps. -->
+          <query>index=security_events earliest=-24h
+| eval event_age_min=round((now()-strptime(timestamp,"%Y-%m-%dT%H:%M:%S%z"))/60,1)
+| stats avg(event_age_min) as mttd_min
+| eval mttd_min=round(mttd_min,1)</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="unit">min</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+      </single>
+    </panel>
+  </row>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       Row 2 – Alert volume over time
+       ════════════════════════════════════════════════════════════════════════ -->
+  <row>
+    <panel>
+      <title>Alert Volume Over Time (by Sourcetype)</title>
+      <chart>
+        <search>
+          <query>index=security_events OR index=threat_intel earliest=-24h
+| timechart span=30m count by sourcetype</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Event Count</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       Row 3 – Top attackers and severity breakdown
+       ════════════════════════════════════════════════════════════════════════ -->
+  <row>
+    <panel>
+      <title>Top 10 Attacking IPs (Last 24 h)</title>
+      <table>
+        <search>
+          <query>index=security_events sourcetype="syslog:ssh" event_type="ssh_failed_login" earliest=-24h
+| stats count as failed_logins, dc(username) as usernames_tried, dc(dst_ip) as targets
+    by src_ip
+| sort - failed_logins
+| head 10
+| rename src_ip as "Source IP",
+         failed_logins as "Failed Logins",
+         usernames_tried as "Usernames Tried",
+         targets as "Targets"</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+
+    <panel>
+      <title>Alert Severity Breakdown (Last 24 h)</title>
+      <chart>
+        <search>
+          <query>index=security_events OR index=threat_intel earliest=-24h
+| stats count by severity
+| sort - count</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.fieldColors">{"critical": 0xd93f3c, "high": 0xf8be34, "medium": 0x6db7c6, "low": 0x65a637, "informational": 0xaaaaaa}</option>
+        <option name="charting.drilldown">all</option>
+      </chart>
+    </panel>
+  </row>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       Row 4 – Threat-intel IOC table and MITRE ATT&CK heatmap data
+       ════════════════════════════════════════════════════════════════════════ -->
+  <row>
+    <panel>
+      <title>Phase 1 Normalizer – Recent Malicious IOCs</title>
+      <table>
+        <search>
+          <query>index=threat_intel sourcetype="threat:normalizer" is_malicious=true earliest=-24h
+| stats count, max(threat_score) as max_score, values(geo_country) as countries
+    by indicator_value, indicator_type, verdict, indicator_family
+| sort - max_score
+| head 20
+| rename indicator_value as "Indicator",
+         indicator_type  as "Type",
+         verdict         as "Verdict",
+         indicator_family as "Family",
+         max_score        as "Max Score",
+         countries        as "Countries",
+         count            as "Seen"</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="count">20</option>
+      </table>
+    </panel>
+  </row>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       Row 5 – MITRE ATT&CK technique distribution
+       ════════════════════════════════════════════════════════════════════════ -->
+  <row>
+    <panel>
+      <title>MITRE ATT&amp;CK Technique Distribution (Process Events)</title>
+      <chart>
+        <search>
+          <query>index=security_events sourcetype="syslog:process" event_type="suspicious_process" earliest=-24h
+| mvexpand mitre_technique_ids
+| stats count by mitre_technique_ids, mitre_tactic
+| sort - count
+| head 15</query>
+          <earliest>-24h</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisTitleX.text">Technique ID</option>
+        <option name="charting.axisTitleY.text">Event Count</option>
+        <option name="charting.legend.placement">right</option>
+      </chart>
+    </panel>
+
+    <panel>
+      <title>C2 Beaconing Candidates (Last 30 min)</title>
+      <table>
+        <search>
+          <query>index=security_events sourcetype="network:flow" event_type="suspicious_outbound" earliest=-30m
+| sort src_ip, dst_ip, _time
+| streamstats current=f last(_time) as prev_time by src_ip, dst_ip
+| eval interval_sec=_time - prev_time
+| where interval_sec > 0
+| stats count, avg(interval_sec) as mean_interval, stdev(interval_sec) as sd
+    by src_ip, dst_ip, dst_port
+| where count >= 3
+| eval cv=round(sd / mean_interval, 3)
+| where cv < 0.5
+| sort + cv
+| head 10
+| rename src_ip as "Source", dst_ip as "Destination",
+         dst_port as "Port", count as "Connections",
+         mean_interval as "Mean Interval (s)", cv as "CV (lower=more regular)"</query>
+          <earliest>-30m</earliest>
+          <latest>now</latest>
+        </search>
+      </table>
+    </panel>
+  </row>
+
+</dashboard>
