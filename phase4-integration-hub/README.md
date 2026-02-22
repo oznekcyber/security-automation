@@ -13,16 +13,31 @@ security automation phases, with OpenAPI documentation and JWT authentication.
 ## Quick Start
 
 ```bash
-docker build -t phase4-integration-hub .
-docker run -p 8000:8000 --env-file .env phase4-integration-hub
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload
+# open http://localhost:8000/docs
 ```
 
-Then open http://localhost:8000/docs for the interactive API documentation.
+## Running Tests
 
-## Environment Variables
+```bash
+pytest tests/ -v
+```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `SECRET_KEY` | JWT signing secret | Yes |
-| `API_KEY` | Static API key for service accounts | No |
-| `LOG_LEVEL` | Logging verbosity (default: INFO) | No |
+## Severity Mapping
+
+| CrowdStrike (1-100) | TheHive |
+|---|---|
+| 1-25 | 1 Low |
+| 26-50 | 2 Medium |
+| 51-74 | 3 High |
+| 75-100 | 4 Critical |
+
+## Status Mapping
+
+| TheHive Case Status | CrowdStrike Detection Status |
+|---|---|
+| Resolved | closed |
+| In Progress | in_progress |
+| New | new |

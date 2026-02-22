@@ -1,95 +1,188 @@
-#!/usr/bin/env python3
-"""
-Phase 2 — Splunk Log Ingestion Pipeline
+"""Phase 2 – Splunk SIEM log ingestion pipeline – CLI entry point.
 
-Parses structured security log events and forwards them to
-Splunk via the HTTP Event Collector (HEC) API.
+Usage examples
+--------------
+Generate 10 events of each type and print to stdout (no Splunk required)::
 
-Usage:
-    python main.py                   # Process logs from stdin
-    python main.py --file events.log # Process a log file
-    python main.py --demo            # Run with built-in sample data
+    python main.py --generate-only 10
+
+Ship 5 events of each type to a live Splunk HEC endpoint::
+
+    python main.py --ship 5
+
+Ingest Phase 1 normalizer output from a JSON file::
+
+    python main.py --ingest-normalizer /path/to/alerts.json
+
+Run in continuous mode (Ctrl-C to stop)::
+
+    python main.py --continuous
+
+Dry-run (logs what would be sent, no actual HTTP calls)::
+
+    python main.py --ship 5 --demo
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import logging
-import os
 import sys
+import time
+from typing import List, Dict, Any
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
-SAMPLE_EVENTS = [
-    {
-        "timestamp": "2024-02-18T12:00:00Z",
-        "source": "firewall",
-        "severity": "high",
-        "src_ip": "185.220.101.1",
-        "dst_ip": "10.0.0.5",
-        "action": "blocked",
-        "bytes": 1024,
-    },
-    {
-        "timestamp": "2024-02-18T12:01:00Z",
-        "source": "ids",
-        "severity": "critical",
-        "signature": "ET MALWARE TorrentLocker CnC Beacon",
-        "src_ip": "192.168.1.100",
-        "dst_ip": "45.33.32.156",
-        "action": "alert",
-    },
-]
+from src.utils.config import load_config
+from src.utils.logger import configure_logging, get_logger
+from src.generators.ssh_events import generate_ssh_failed_login, generate_ssh_successful_login
+from src.generators.process_events import generate_suspicious_process
+from src.generators.network_events import generate_suspicious_outbound, generate_dns_query
+from src.generators.ioc_events import generate_ioc_match
+from src.shippers.hec_shipper import HECShipper, HECError
+from src.shippers.batch_manager import BatchManager
+from src.integrations.normalizer_bridge import NormalizerBridge
 
 
-def normalize_event(raw: dict) -> dict:
-    """Normalize a raw log event to a common schema."""
-    return {
-        "time": raw.get("timestamp"),
-        "source": raw.get("source", "unknown"),
-        "severity": raw.get("severity", "info"),
-        "fields": {k: v for k, v in raw.items() if k not in ("timestamp", "source", "severity")},
-    }
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="phase2-pipeline",
+        description="Splunk SIEM log ingestion and alerting pipeline (Phase 2)",
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--generate-only",
+        metavar="N",
+        type=int,
+        help="Generate N events of each type and print as JSON to stdout",
+    )
+    mode.add_argument(
+        "--ship",
+        metavar="N",
+        type=int,
+        help="Generate and ship N events of each type to Splunk",
+    )
+    mode.add_argument(
+        "--ingest-normalizer",
+        metavar="FILE",
+        dest="ingest_normalizer",
+        help="Read a JSON file of Phase 1 NormalizedAlert dicts and ship to Splunk",
+    )
+    mode.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Continuously generate and ship events until Ctrl-C",
+    )
+
+    parser.add_argument(
+        "--sourcetype",
+        default=None,
+        help="Override the default sourcetype for shipped events",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Dry-run mode: log what would be sent without making HEC calls",
+    )
+    return parser
 
 
-def forward_to_splunk(events: list[dict], hec_url: str, hec_token: str) -> bool:
-    """Forward normalized events to Splunk HEC (stub — implement with requests)."""
-    logger.info("Forwarding %d event(s) to Splunk HEC at %s", len(events), hec_url)
-    logger.info("Set SPLUNK_HEC_URL and SPLUNK_HEC_TOKEN to enable real forwarding.")
-    return True
+def _all_events(count: int) -> List[tuple[Dict[str, Any], str]]:
+    """Return a flat list of (event_dict, sourcetype) tuples."""
+    return (
+        [(ev, "syslog:ssh") for ev in generate_ssh_failed_login(count)]
+        + [(ev, "syslog:ssh") for ev in generate_ssh_successful_login(count)]
+        + [(ev, "syslog:process") for ev in generate_suspicious_process(count)]
+        + [(ev, "network:flow") for ev in generate_suspicious_outbound(count)]
+        + [(ev, "network:dns") for ev in generate_dns_query(count)]
+        + [(ev, "endpoint:ioc") for ev in generate_ioc_match(count)]
+    )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Splunk Log Ingestion Pipeline")
-    parser.add_argument("--file", metavar="FILE", help="Log file to process")
-    parser.add_argument("--demo", action="store_true", help="Run with sample data")
+def cmd_generate_only(count: int) -> None:
+    """Print generated events as JSON to stdout without shipping."""
+    log = get_logger("main")
+    events = _all_events(count)
+    log.info("Generated %d total events", len(events))
+    for ev, sourcetype in events:
+        record = {"sourcetype": sourcetype, "event": ev}
+        print(json.dumps(record, default=str))
+
+
+def cmd_ship(count: int, sourcetype_override: str | None, dry_run: bool) -> None:
+    """Generate and ship events to Splunk."""
+    log = get_logger("main")
+    config = load_config()
+    configure_logging(config.log_level, config.shipper_log_file)
+    shipper = HECShipper(config, dry_run=dry_run)
+
+    events = _all_events(count)
+    log.info("Shipping %d events (dry_run=%s)", len(events), dry_run)
+
+    with BatchManager(shipper, batch_size=config.batch_size) as bm:
+        for ev, sourcetype in events:
+            st = sourcetype_override or sourcetype
+            try:
+                bm.add_event(ev, sourcetype=st)
+            except HECError as exc:
+                log.error("HEC error: %s", exc)
+
+
+def cmd_ingest_normalizer(filepath: str, dry_run: bool) -> None:
+    """Ingest Phase 1 normalizer output from a JSON file."""
+    log = get_logger("main")
+    config = load_config()
+    configure_logging(config.log_level, config.shipper_log_file)
+    shipper = HECShipper(config, dry_run=dry_run)
+    bridge = NormalizerBridge(shipper, config)
+    try:
+        n = bridge.ingest_alerts_file(filepath)
+        log.info("Ingested %d alerts from %s", n, filepath)
+    except (FileNotFoundError, ValueError) as exc:
+        log.error("Failed to ingest normalizer file: %s", exc)
+        sys.exit(1)
+
+
+def cmd_continuous(sourcetype_override: str | None, dry_run: bool) -> None:
+    """Loop forever, generating and shipping events every 5 seconds."""
+    log = get_logger("main")
+    config = load_config()
+    configure_logging(config.log_level, config.shipper_log_file)
+    shipper = HECShipper(config, dry_run=dry_run)
+    log.info("Continuous mode started (Ctrl-C to stop)")
+    try:
+        while True:
+            events = _all_events(1)
+            with BatchManager(shipper, batch_size=config.batch_size) as bm:
+                for ev, sourcetype in events:
+                    try:
+                        bm.add_event(ev, sourcetype=sourcetype_override or sourcetype)
+                    except HECError as exc:
+                        log.error("HEC error: %s", exc)
+            log.info("Cycle complete – sleeping 5 s")
+            time.sleep(5)
+    except KeyboardInterrupt:
+        log.info("Continuous mode stopped by user")
+
+
+def main() -> None:
+    parser = _build_parser()
     args = parser.parse_args()
 
-    hec_url = os.getenv("SPLUNK_HEC_URL", "")
-    hec_token = os.getenv("SPLUNK_HEC_TOKEN", "")
+    # Bootstrap logging with defaults before config is loaded.
+    configure_logging("INFO")
+    log = get_logger("main")
 
-    if args.demo:
-        logger.info("Running in DEMO mode with %d sample events", len(SAMPLE_EVENTS))
-        events = SAMPLE_EVENTS
-    elif args.file:
-        with open(args.file, encoding="utf-8") as fh:
-            events = json.load(fh)
+    if args.generate_only is not None:
+        cmd_generate_only(args.generate_only)
+    elif args.ship is not None:
+        cmd_ship(args.ship, args.sourcetype, args.demo)
+    elif args.ingest_normalizer:
+        cmd_ingest_normalizer(args.ingest_normalizer, args.demo)
+    elif args.continuous:
+        cmd_continuous(args.sourcetype, args.demo)
     else:
-        logger.info("Reading events from stdin (Ctrl+D to finish)...")
-        events = json.load(sys.stdin)
-
-    normalized = [normalize_event(e) for e in events]
-    logger.info("Normalized %d event(s)", len(normalized))
-
-    if hec_url and hec_token:
-        forward_to_splunk(normalized, hec_url, hec_token)
-    else:
-        print(json.dumps(normalized, indent=2))
-
-    return 0
+        parser.print_help()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

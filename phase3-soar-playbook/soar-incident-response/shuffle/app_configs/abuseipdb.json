@@ -1,0 +1,78 @@
+{
+  "app_name": "AbuseIPDB",
+  "app_version": "2.0",
+  "description": "AbuseIPDB v2 API integration for IP reputation and abuse report lookups",
+  "authentication": {
+    "type": "api_key",
+    "header_name": "Key",
+    "env_var": "ABUSEIPDB_API_KEY"
+  },
+  "base_url": "https://api.abuseipdb.com/api/v2",
+  "rate_limit": {
+    "requests_per_day": 1000,
+    "note": "Free tier. Subscriber plans offer higher limits."
+  },
+  "default_headers": {
+    "Accept": "application/json"
+  },
+  "endpoints": {
+    "check_ip": {
+      "method": "GET",
+      "path": "/check",
+      "description": "Check an IP address against the AbuseIPDB database",
+      "parameters": {
+        "ipAddress": {
+          "type": "string",
+          "required": true,
+          "description": "IPv4 or IPv6 address to check"
+        },
+        "maxAgeInDays": {
+          "type": "integer",
+          "required": false,
+          "default": 90,
+          "description": "Only return reports from the last N days (1-365)"
+        },
+        "verbose": {
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Include individual report details in response"
+        }
+      },
+      "response_fields": {
+        "data.ipAddress": "The queried IP address",
+        "data.abuseConfidenceScore": "Confidence score 0-100 that IP is abusive",
+        "data.totalReports": "Total number of abuse reports",
+        "data.lastReportedAt": "ISO timestamp of most recent report",
+        "data.countryCode": "ISO 3166-1 alpha-2 country code",
+        "data.isp": "Internet Service Provider name",
+        "data.usageType": "Usage type (e.g. Data Center/Web Hosting/Transit)",
+        "data.isTor": "Whether the IP is a known Tor exit node",
+        "data.isWhitelisted": "Whether IP is on the AbuseIPDB whitelist"
+      }
+    },
+    "report_ip": {
+      "method": "POST",
+      "path": "/report",
+      "description": "Report an abusive IP address",
+      "parameters": {
+        "ip": { "type": "string", "required": true },
+        "categories": {
+          "type": "string",
+          "required": true,
+          "description": "Comma-separated category IDs (see https://www.abuseipdb.com/categories)"
+        },
+        "comment": { "type": "string", "required": false }
+      }
+    },
+    "get_blacklist": {
+      "method": "GET",
+      "path": "/blacklist",
+      "description": "Download list of IPs with confidence score >= threshold",
+      "parameters": {
+        "confidenceMinimum": { "type": "integer", "default": 100 },
+        "limit": { "type": "integer", "default": 10000 }
+      }
+    }
+  }
+}
