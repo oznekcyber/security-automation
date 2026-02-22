@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: security-integration-hub:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - CROWDSTRIKE_MOCK=true
+      - LOG_LEVEL=INFO
+      - CIRCUIT_BREAKER_THRESHOLD=5
+      - CIRCUIT_BREAKER_TIMEOUT=60
+    env_file:
+      - .env.example
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: stub TheHive using a simple echo server for local integration testing
+  thehive-stub:
+    image: mendhak/http-https-echo:latest
+    ports:
+      - "9000:8080"
+    restart: unless-stopped
