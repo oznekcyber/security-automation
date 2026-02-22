@@ -27,7 +27,7 @@ jobs:
       changelog: ${{ steps.semver.outputs.changelog }}
     steps:
       - name: Checkout repository with full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -62,7 +62,7 @@ jobs:
             context: ./phase4-integration-hub
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check if Dockerfile exists for ${{ matrix.phase.name }}
         id: dockerfile-check
@@ -119,7 +119,7 @@ jobs:
     if: always() && needs.version.outputs.new_tag != ''
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
