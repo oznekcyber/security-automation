@@ -46,11 +46,6 @@ _DENY_ALL_POLICY = json.dumps({
             "Effect": "Deny",
             "Action": "*",
             "Resource": "*",
-            "Condition": {
-                "StringEquals": {
-                    "aws:RequestedRegion": "*"  # All regions
-                }
-            },
         }
     ],
 })
