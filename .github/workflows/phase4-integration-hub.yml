@@ -10,6 +10,9 @@ on:
       - "phase4-integration-hub/**"
       - ".github/workflows/phase4-integration-hub.yml"
 
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: phase4-integration-hub

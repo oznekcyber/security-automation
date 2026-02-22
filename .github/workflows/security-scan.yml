@@ -9,6 +9,10 @@ on:
     # Run nightly at 02:00 UTC to catch newly published CVEs
     - cron: "0 2 * * *"
 
+permissions:
+  contents: read
+  security-events: write  # required for SARIF upload to GitHub Security tab
+
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
   # Job 1: Secret detection — fail the build on any hardcoded credential

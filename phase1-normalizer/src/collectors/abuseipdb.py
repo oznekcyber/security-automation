@@ -118,5 +118,5 @@ def fetch_ip_report(ip: str, cfg: Config, max_age_days: int = 90) -> dict[str, A
         resp.raise_for_status()
 
     raise RuntimeError(
-        f"AbuseIPDB request for {ip} failed after {cfg.max_retries + 1} " "attempts (rate-limited)"
+        f"AbuseIPDB request for {ip} failed after {cfg.max_retries + 1} attempts (rate-limited)"
     )

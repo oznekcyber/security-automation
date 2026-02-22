@@ -28,6 +28,8 @@ LABEL org.opencontainers.image.title="Security Alert Normalizer" \
 RUN groupadd --gid 1001 appgroup \
     && useradd --uid 1001 --gid appgroup --no-create-home --shell /sbin/nologin appuser
 
+RUN mkdir -p /app && chown appuser:appgroup /app
+
 WORKDIR /app
 
 # Copy installed packages from builder stage

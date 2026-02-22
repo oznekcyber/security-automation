@@ -10,6 +10,9 @@ on:
       - "phase1-normalizer/**"
       - ".github/workflows/phase1-normalizer.yml"
 
+permissions:
+  contents: read
+
 defaults:
   run:
     working-directory: phase1-normalizer
