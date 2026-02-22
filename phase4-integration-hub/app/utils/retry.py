@@ -29,12 +29,10 @@ def retry_with_backoff(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            last_exception: Exception | None = None
             for attempt in range(max_retries + 1):
                 try:
                     return await func(*args, **kwargs)
                 except exceptions as exc:
-                    last_exception = exc
                     if attempt == max_retries:
                         logger.warning(
                             "retry_exhausted",
@@ -53,8 +51,6 @@ def retry_with_backoff(
                         error=str(exc),
                     )
                     await asyncio.sleep(delay)
-            # Should never reach here, but satisfies type checkers
-            raise last_exception  # type: ignore[misc]
 
         return wrapper
 

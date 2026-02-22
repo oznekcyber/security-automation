@@ -49,12 +49,12 @@ def _make_mock_thehive():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def mock_crowdstrike_service():
     return _make_mock_crowdstrike()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture()
 def mock_thehive_service():
     return _make_mock_thehive()
 

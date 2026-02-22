@@ -63,7 +63,7 @@ class CircuitBreaker:
         self._state: CircuitState = CircuitState.CLOSED
         self._failure_count: int = 0
         self._half_open_calls: int = 0
-        self._last_failure_time: float | None = None
+        self._last_failure_time: float = 0.0
         self._lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
@@ -79,7 +79,7 @@ class CircuitBreaker:
         return self._failure_count
 
     @property
-    def last_failure_time(self) -> float | None:
+    def last_failure_time(self) -> float:
         return self._last_failure_time
 
     # ------------------------------------------------------------------
@@ -128,7 +128,7 @@ class CircuitBreaker:
     # ------------------------------------------------------------------
 
     async def _maybe_transition_to_half_open(self) -> None:
-        if self._state == CircuitState.OPEN and self._last_failure_time is not None:
+        if self._state == CircuitState.OPEN and self._last_failure_time > 0:
             elapsed = time.monotonic() - self._last_failure_time
             if elapsed >= self._recovery_timeout:
                 self._state = CircuitState.HALF_OPEN

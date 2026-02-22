@@ -1,4 +1,4 @@
-"""Tests for sync endpoints and circuit breaker behaviour."""
+"""Tests for sync endpoints and circuit breaker behavior."""
 
 from __future__ import annotations
 
@@ -52,7 +52,6 @@ class TestCircuitBreakerStateMachine:
     """Directly test the CircuitBreaker class using asyncio."""
 
     def _run(self, coro):
-        import asyncio
         return asyncio.run(coro)
 
     def test_initial_state_is_closed(self):
