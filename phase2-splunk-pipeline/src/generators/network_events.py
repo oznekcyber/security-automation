@@ -84,6 +84,7 @@ def generate_suspicious_outbound(count: int = 1) -> List[Dict[str, Any]]:
     beacon_dst = random.choice(_C2_IPS)
     beacon_port = random.choice(_UNUSUAL_PORTS)
     base_time = datetime.now(timezone.utc)
+    beacon_count = 0  # Counts only beacon events so their intervals stay ~60 s
 
     for i in range(count):
         is_beacon = count >= 3 and random.random() < 0.7
@@ -92,9 +93,12 @@ def generate_suspicious_outbound(count: int = 1) -> List[Dict[str, Any]]:
             src_ip = beacon_src
             dst_ip = beacon_dst
             dst_port = beacon_port
-            # ~60 s interval with ±5 s jitter
-            jitter = random.uniform(-5, 5)
-            ts = base_time + timedelta(seconds=(i * 60 + jitter))
+            # ~60 s interval with ±3 s jitter; use beacon_count (not i) so that
+            # intervals between successive beacon events are always ~60 s
+            # regardless of how many non-beacon events were interleaved.
+            jitter = random.uniform(-3, 3)
+            ts = base_time + timedelta(seconds=(beacon_count * 60 + jitter))
+            beacon_count += 1
         else:
             src_ip = random.choice(_INTERNAL_SRC_IPS)
             dst_ip = random.choice(_C2_IPS)
