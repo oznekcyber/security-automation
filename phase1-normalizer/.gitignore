@@ -1,0 +1,10 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+normalized_alerts.json
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
