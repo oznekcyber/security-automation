@@ -1,0 +1,195 @@
+{
+  "workflow_id": "phishing-response-v1",
+  "name": "Phishing Alert Response Playbook",
+  "description": "Automated triage for phishing alerts from Splunk. Extracts IOCs, enriches via VT and AbuseIPDB, scores risk, creates TheHive case, and notifies Slack.",
+  "tags": ["phishing", "email", "tier1-triage", "phase3"],
+  "start": "webhook_trigger",
+  "actions": [
+    {
+      "id": "webhook_trigger",
+      "name": "Splunk Alert Webhook",
+      "app_name": "Webhook",
+      "app_version": "1.0.0",
+      "action": "listen",
+      "description": "Receives the Splunk Notable Event alert via HTTP POST. Splunk is configured to send alerts to this URL when the 'Phishing Detected' saved search fires.",
+      "parameters": {
+        "method": "POST",
+        "content_type": "application/json"
+      },
+      "position": { "x": 100, "y": 100 }
+    },
+    {
+      "id": "extract_iocs",
+      "name": "Extract IOCs",
+      "app_name": "Python",
+      "app_version": "1.0.0",
+      "action": "run_script",
+      "description": "Calls IOCExtractor to parse IPs, URLs, hashes, and emails from the alert text. Private IPs are excluded automatically.",
+      "parameters": {
+        "script": "from src.ioc_extractor import IOCExtractor; e = IOCExtractor(); result = e.extract(execution_argument.get('alert_text', '')); return result"
+      },
+      "execution_variable": "iocs",
+      "position": { "x": 100, "y": 250 }
+    },
+    {
+      "id": "vt_enrich_ip",
+      "name": "VirusTotal IP Lookup",
+      "app_name": "VirusTotal",
+      "app_version": "3.0",
+      "action": "get_ip_report",
+      "description": "Submits each extracted IP to VT v3 API. Rate-limited to 4 req/min on free tier — the workflow sleeps between requests if needed.",
+      "parameters": {
+        "apikey": "$ENV.VIRUSTOTAL_API_KEY",
+        "ip": "$iocs.ips[0]",
+        "base_url": "https://www.virustotal.com/api/v3/ip_addresses"
+      },
+      "execution_variable": "vt_result",
+      "position": { "x": 300, "y": 250 }
+    },
+    {
+      "id": "abuseipdb_enrich_ip",
+      "name": "AbuseIPDB IP Check",
+      "app_name": "HTTP",
+      "app_version": "1.0.0",
+      "action": "request",
+      "description": "Queries AbuseIPDB v2 /check endpoint for each IP. Returns confidence score and total report count.",
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.abuseipdb.com/api/v2/check",
+        "headers": {
+          "Key": "$ENV.ABUSEIPDB_API_KEY",
+          "Accept": "application/json"
+        },
+        "query_params": {
+          "ipAddress": "$iocs.ips[0]",
+          "maxAgeInDays": "90"
+        }
+      },
+      "execution_variable": "abuse_result",
+      "position": { "x": 500, "y": 250 }
+    },
+    {
+      "id": "score_enrichment",
+      "name": "Calculate Risk Score",
+      "app_name": "Python",
+      "app_version": "1.0.0",
+      "action": "run_script",
+      "description": "Calls EnrichmentScorer to combine VT + AbuseIPDB results into a composite 0-10 risk score with tier and decision.",
+      "parameters": {
+        "script": "from src.enrichment_scorer import EnrichmentScorer; s = EnrichmentScorer(); result = s.score({'vt_result': $vt_result, 'abuse_result': $abuse_result}); return result"
+      },
+      "execution_variable": "score_result",
+      "position": { "x": 700, "y": 250 }
+    },
+    {
+      "id": "decision_branch",
+      "name": "Triage Decision",
+      "app_name": "Condition",
+      "app_version": "1.0.0",
+      "action": "condition",
+      "description": "Routes the alert based on SOAR decision: auto-escalate → create TheHive case + page; analyst-review → create TheHive case; auto-close → log only.",
+      "parameters": {
+        "conditions": [
+          {
+            "condition": "$score_result.score > 5",
+            "label": "auto-escalate",
+            "next": "create_thehive_case"
+          },
+          {
+            "condition": "$score_result.score > 2",
+            "label": "analyst-review",
+            "next": "create_thehive_case"
+          },
+          {
+            "condition": "true",
+            "label": "auto-close",
+            "next": "log_to_splunk"
+          }
+        ]
+      },
+      "position": { "x": 900, "y": 250 }
+    },
+    {
+      "id": "create_thehive_case",
+      "name": "Create TheHive Case",
+      "app_name": "HTTP",
+      "app_version": "1.0.0",
+      "action": "request",
+      "description": "POSTs a new case to TheHive v4 REST API. The payload is built by TheHiveCaseBuilder and includes observables, tasks, and a markdown description.",
+      "parameters": {
+        "method": "POST",
+        "url": "$ENV.THEHIVE_URL/api/case",
+        "headers": {
+          "Authorization": "Bearer $ENV.THEHIVE_API_KEY",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "script": "from src.thehive_case_builder import TheHiveCaseBuilder; b = TheHiveCaseBuilder(); return b.build('phishing', $execution_argument['alert_title'], $iocs, $score_result)"
+        }
+      },
+      "execution_variable": "thehive_case",
+      "position": { "x": 1100, "y": 150 }
+    },
+    {
+      "id": "notify_slack",
+      "name": "Slack Notification",
+      "app_name": "HTTP",
+      "app_version": "1.0.0",
+      "action": "request",
+      "description": "POSTs a Block Kit message to the security-alerts Slack channel. Colour-coded by severity, includes IOC table and action buttons.",
+      "parameters": {
+        "method": "POST",
+        "url": "$ENV.SLACK_WEBHOOK_URL",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "script": "from src.slack_formatter import SlackFormatter; f = SlackFormatter(); return f.format($execution_argument['alert_title'], $score_result, $iocs, thehive_case_url=$thehive_case.get('_id',''))"
+        }
+      },
+      "execution_variable": "slack_response",
+      "position": { "x": 1100, "y": 350 }
+    },
+    {
+      "id": "log_to_splunk",
+      "name": "Log Result to Splunk HEC",
+      "app_name": "HTTP",
+      "app_version": "1.0.0",
+      "action": "request",
+      "description": "Sends the final triage result back to Splunk via HEC so analysts can see SOAR decisions in dashboards alongside the original alert.",
+      "parameters": {
+        "method": "POST",
+        "url": "$ENV.SPLUNK_HEC_URL",
+        "headers": {
+          "Authorization": "Splunk $ENV.SPLUNK_HEC_TOKEN",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "event": {
+            "source": "soar-phase3",
+            "sourcetype": "soar:triage_result",
+            "score": "$score_result.score",
+            "tier": "$score_result.tier",
+            "decision": "$score_result.decision",
+            "ioc_count": "$iocs.ips | length",
+            "thehive_case_id": "$thehive_case._id"
+          }
+        }
+      },
+      "execution_variable": "splunk_response",
+      "position": { "x": 1300, "y": 250 }
+    }
+  ],
+  "branches": [
+    { "source": "webhook_trigger", "target": "extract_iocs", "label": "" },
+    { "source": "extract_iocs", "target": "vt_enrich_ip", "label": "" },
+    { "source": "extract_iocs", "target": "abuseipdb_enrich_ip", "label": "" },
+    { "source": "vt_enrich_ip", "target": "score_enrichment", "label": "" },
+    { "source": "abuseipdb_enrich_ip", "target": "score_enrichment", "label": "" },
+    { "source": "score_enrichment", "target": "decision_branch", "label": "" },
+    { "source": "decision_branch", "target": "create_thehive_case", "label": "escalate/review" },
+    { "source": "decision_branch", "target": "log_to_splunk", "label": "auto-close" },
+    { "source": "create_thehive_case", "target": "notify_slack", "label": "" },
+    { "source": "notify_slack", "target": "log_to_splunk", "label": "" }
+  ]
+}

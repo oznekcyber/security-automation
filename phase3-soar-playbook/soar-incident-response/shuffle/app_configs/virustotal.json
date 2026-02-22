@@ -1,0 +1,58 @@
+{
+  "app_name": "VirusTotal",
+  "app_version": "3.0",
+  "description": "VirusTotal v3 API integration for IP, domain, URL, and file hash lookups",
+  "authentication": {
+    "type": "api_key",
+    "header_name": "x-apikey",
+    "env_var": "VIRUSTOTAL_API_KEY"
+  },
+  "base_url": "https://www.virustotal.com/api/v3",
+  "rate_limit": {
+    "requests_per_minute": 4,
+    "requests_per_day": 500,
+    "note": "Free tier limits. Commercial tier allows up to 1000 req/min."
+  },
+  "endpoints": {
+    "get_ip_report": {
+      "method": "GET",
+      "path": "/ip_addresses/{ip}",
+      "description": "Retrieve analysis report for an IPv4 address",
+      "parameters": {
+        "ip": { "type": "string", "required": true, "description": "IPv4 address" }
+      },
+      "response_fields": {
+        "data.attributes.last_analysis_stats.malicious": "Number of engines flagging as malicious",
+        "data.attributes.last_analysis_stats.suspicious": "Number of engines flagging as suspicious",
+        "data.attributes.last_analysis_stats.undetected": "Number of engines with no detection",
+        "data.attributes.reputation": "Community reputation score (-100 to +100)",
+        "data.attributes.country": "ISO country code",
+        "data.attributes.as_owner": "Autonomous System owner name"
+      }
+    },
+    "get_url_report": {
+      "method": "GET",
+      "path": "/urls/{url_id}",
+      "description": "Retrieve analysis report for a URL (url_id = base64url-encoded URL)",
+      "parameters": {
+        "url_id": { "type": "string", "required": true, "description": "Base64url-encoded URL string" }
+      }
+    },
+    "get_file_report": {
+      "method": "GET",
+      "path": "/files/{hash}",
+      "description": "Retrieve file analysis report by MD5, SHA1, or SHA256 hash",
+      "parameters": {
+        "hash": { "type": "string", "required": true, "description": "MD5, SHA1, or SHA256 hash" }
+      }
+    },
+    "get_domain_report": {
+      "method": "GET",
+      "path": "/domains/{domain}",
+      "description": "Retrieve analysis report for a domain",
+      "parameters": {
+        "domain": { "type": "string", "required": true, "description": "Domain name" }
+      }
+    }
+  }
+}

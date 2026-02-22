@@ -1,0 +1,81 @@
+{
+  "name": "Phishing Investigation",
+  "displayName": "Phishing Investigation",
+  "description": "Standard investigation template for phishing email incidents. Use for suspicious emails, credential-harvesting pages, and spear-phishing campaigns.",
+  "severity": 2,
+  "tlp": 2,
+  "pap": 2,
+  "flag": false,
+  "tags": ["phishing", "email", "social-engineering"],
+  "tasks": [
+    {
+      "order": 0,
+      "title": "Triage — Verify alert authenticity",
+      "group": "Triage",
+      "description": "Confirm the alert is not a false positive. Check if the sender domain is a known-bad domain and if the email was actually delivered.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 1,
+      "title": "Collect — Preserve email evidence",
+      "group": "Collection",
+      "description": "Save the original EML/MSG file with full headers. Extract and document: sender address, reply-to, X-Originating-IP, Message-ID.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 2,
+      "title": "Analyse — Sender domain reputation",
+      "group": "Analysis",
+      "description": "Check sender domain/IP against VT, AbuseIPDB. Check domain creation date (recent = suspicious). Verify SPF/DKIM/DMARC alignment.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 3,
+      "title": "Analyse — URLs and attachments",
+      "group": "Analysis",
+      "description": "Submit all URLs to VT and URLScan.io. Submit attachments to sandboxes (Any.Run, Hybrid Analysis). Document findings.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 4,
+      "title": "Contain — Identify affected users",
+      "group": "Containment",
+      "description": "Determine which users received/opened the email. Check mail gateway logs for delivery and click-through events.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 5,
+      "title": "Contain — Block at email gateway",
+      "group": "Containment",
+      "description": "Block sender domain/IP at email gateway. If a credential-harvesting URL was clicked, force password reset for affected users.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 6,
+      "title": "Remediate — User notification",
+      "group": "Remediation",
+      "description": "Notify affected users. If credentials may have been captured, initiate password reset and MFA review.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 7,
+      "title": "Close — Document and close",
+      "group": "Closure",
+      "description": "Write closure summary. Submit IOCs to threat-intel platform. Mark false-positive classification if applicable.",
+      "status": "Waiting",
+      "flag": false
+    }
+  ],
+  "customFields": {
+    "caseType": { "type": "string", "value": "phishing" },
+    "attackVector": { "type": "string", "value": "email" },
+    "mitreTechnique": { "type": "string", "value": "T1566 - Phishing" }
+  }
+}
