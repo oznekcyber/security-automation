@@ -1,0 +1,81 @@
+{
+  "name": "Network Anomaly Investigation",
+  "displayName": "Network Anomaly Investigation",
+  "description": "Investigation template for unusual network traffic, potential data exfiltration, C2 beaconing, or policy violations detected by IDS/IPS or SIEM.",
+  "severity": 2,
+  "tlp": 1,
+  "pap": 1,
+  "flag": false,
+  "tags": ["network", "anomaly", "ids", "exfiltration"],
+  "tasks": [
+    {
+      "order": 0,
+      "title": "Triage — Characterise the anomaly",
+      "group": "Triage",
+      "description": "Review the SIEM alert. Determine: source/destination, protocol, volume, time window. Is this a known-bad indicator or statistical anomaly?",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 1,
+      "title": "Collect — Retrieve relevant logs",
+      "group": "Collection",
+      "description": "Pull firewall, proxy, DNS, and NetFlow logs for the alert window. Capture PCAP if available and permitted.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 2,
+      "title": "Analyse — Destination reputation",
+      "group": "Analysis",
+      "description": "Check destination IPs and domains against VT, AbuseIPDB, threat-intel feeds. Check WHOIS and hosting provider.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 3,
+      "title": "Analyse — Data exfiltration indicators",
+      "group": "Analysis",
+      "description": "Review upload volumes, DNS query sizes, HTTPS certificate details. Look for tunnelling (DNS-over-HTTPS, ICMP tunnelling).",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 4,
+      "title": "Identify — Affected hosts and accounts",
+      "group": "Analysis",
+      "description": "Correlate source IP with asset inventory. Identify user account and business context. Check for recent authentication anomalies.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 5,
+      "title": "Contain — Block suspicious destination",
+      "group": "Containment",
+      "description": "If destination is confirmed malicious, block at perimeter firewall and DNS. Monitor for alternative egress paths.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 6,
+      "title": "Determine — Business justification",
+      "group": "Analysis",
+      "description": "Consult asset owner to determine if traffic is business-justified (e.g. cloud sync, CDN, backup). Document outcome.",
+      "status": "Waiting",
+      "flag": false
+    },
+    {
+      "order": 7,
+      "title": "Close — Update detection rules",
+      "group": "Closure",
+      "description": "If false positive, tune the detection rule. If true positive, document findings and update threat-intel platform.",
+      "status": "Waiting",
+      "flag": false
+    }
+  ],
+  "customFields": {
+    "caseType": { "type": "string", "value": "network_anomaly" },
+    "attackVector": { "type": "string", "value": "network" },
+    "mitreTechnique": { "type": "string", "value": "T1041 - Exfiltration Over C2 Channel" }
+  }
+}

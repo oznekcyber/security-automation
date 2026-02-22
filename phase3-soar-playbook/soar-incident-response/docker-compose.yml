@@ -1,0 +1,216 @@
+version: "3.8"
+
+# ============================================================
+# Phase 3 SOAR Stack — docker-compose.yml
+# ============================================================
+# Services:
+#   shuffle      — Shuffle SOAR orchestration platform
+#   thehive      — Incident management (TheHive 5)
+#   cassandra    — TheHive backend database
+#   elasticsearch— TheHive index/search store
+#   cortex       — Automated analyser/responder platform
+#   nginx        — Reverse proxy (optional, disable if not needed)
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose logs -f thehive
+#   docker-compose down -v   # removes volumes — data loss!
+# ============================================================
+
+networks:
+  soar-net:
+    driver: bridge
+
+volumes:
+  cassandra-data:
+  elasticsearch-data:
+  thehive-data:
+  shuffle-data:
+  cortex-data:
+
+services:
+
+  # ----------------------------------------------------------
+  # Cassandra — TheHive's primary data store
+  # TheHive 5 requires Cassandra 4.x
+  # ----------------------------------------------------------
+  cassandra:
+    image: cassandra:4.1
+    container_name: soar-cassandra
+    restart: unless-stopped
+    networks:
+      - soar-net
+    environment:
+      - CASSANDRA_CLUSTER_NAME=soar-cluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=256M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ----------------------------------------------------------
+  # Elasticsearch — TheHive index store
+  # ----------------------------------------------------------
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.12
+    container_name: soar-elasticsearch
+    restart: unless-stopped
+    networks:
+      - soar-net
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=soar-cluster
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ----------------------------------------------------------
+  # TheHive 5 — Incident Management Platform
+  # Waits for both Cassandra and Elasticsearch to be healthy.
+  # ----------------------------------------------------------
+  thehive:
+    image: strangebee/thehive:5.2
+    container_name: soar-thehive
+    restart: unless-stopped
+    networks:
+      - soar-net
+    depends_on:
+      cassandra:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "9000:9000"
+    environment:
+      # Cassandra connection
+      - TH_DB_PROVIDER=cassandra
+      - TH_DB_CASSANDRA_HOSTNAMES=cassandra
+      - TH_DB_CASSANDRA_CLUSTER_NAME=soar-cluster
+      - TH_DB_CASSANDRA_KEYSPACE=thehive
+      # Elasticsearch
+      - TH_INDEX_BACKEND=elasticsearch
+      - TH_INDEX_ELASTICSEARCH_URLS=http://elasticsearch:9200
+      # Storage
+      - TH_STORAGE_PROVIDER=localfs
+      - TH_STORAGE_LOCALFS_LOCATION=/data/files
+      # Initial admin password (change after first login)
+      - TH_ADMIN_PASSWORD=changeme123!
+    volumes:
+      - thehive-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 120s
+
+  # ----------------------------------------------------------
+  # Cortex — Automated Analyser and Responder
+  # Used by TheHive to run VT, AbuseIPDB, and other analysers.
+  # ----------------------------------------------------------
+  cortex:
+    image: thehiveproject/cortex:3.1.7
+    container_name: soar-cortex
+    restart: unless-stopped
+    networks:
+      - soar-net
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    ports:
+      - "9001:9001"
+    environment:
+      - ES_HOSTNAME=elasticsearch
+      - ES_PORT=9200
+      - CORTEX_ADMIN_PASSWORD=changeme123!
+    volumes:
+      - cortex-data:/var/run/cortex
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9001/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ----------------------------------------------------------
+  # Shuffle SOAR — Orchestration Platform
+  # The frontend proxies to the backend; both run here.
+  # ----------------------------------------------------------
+  shuffle-backend:
+    image: ghcr.io/shuffle/shuffle-backend:latest
+    container_name: soar-shuffle-backend
+    restart: unless-stopped
+    networks:
+      - soar-net
+    ports:
+      - "5001:5001"
+    environment:
+      # Must match the frontend URL for CORS
+      - BACKEND_HOSTNAME=shuffle-backend
+      - DATASTORE_EMULATOR_HOST=shuffle-database:8000
+      - SHUFFLE_APP_HOTLOAD_FOLDER=/shuffle-apps
+      - SHUFFLE_FILE_LOCATION=/shuffle-files
+      # Org and admin setup
+      - SHUFFLE_DEFAULT_USERNAME=admin
+      - SHUFFLE_DEFAULT_PASSWORD=changeme123!
+      - SHUFFLE_DEFAULT_APIKEY=mysecretshufflekey
+    volumes:
+      - shuffle-data:/shuffle-files
+      - /var/run/docker.sock:/var/run/docker.sock  # needed for app execution
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  shuffle-frontend:
+    image: ghcr.io/shuffle/shuffle-frontend:latest
+    container_name: soar-shuffle-frontend
+    restart: unless-stopped
+    networks:
+      - soar-net
+    depends_on:
+      - shuffle-backend
+    ports:
+      - "3001:80"
+      - "3443:443"
+    environment:
+      - BACKEND_HOSTNAME=shuffle-backend
+      - BACKEND_PORT=5001
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  shuffle-database:
+    image: google/cloud-sdk:alpine
+    container_name: soar-shuffle-db
+    restart: unless-stopped
+    networks:
+      - soar-net
+    command: ["gcloud", "beta", "emulators", "datastore", "start",
+              "--host-port=0.0.0.0:8000", "--no-store-on-disk"]
+    ports:
+      - "8000:8000"
