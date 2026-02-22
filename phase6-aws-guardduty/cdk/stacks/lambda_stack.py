@@ -70,7 +70,7 @@ _S3_FINDING_PREFIXES = [
 ]
 
 
-def _ec2_type_filter(prefixes: list[str]) -> list[dict]:
+def _type_prefix_filter(prefixes: list[str]) -> list[dict]:
     return [{"prefix": p} for p in prefixes]
 
 
@@ -342,7 +342,7 @@ class LambdaStack(Stack):
                 detail_type=["GuardDuty Finding"],
                 detail={
                     "severity": [{"numeric": [">=", 7.0]}],
-                    "type": _ec2_type_filter(_EC2_FINDING_PREFIXES),
+                    "type": _type_prefix_filter(_EC2_FINDING_PREFIXES),
                 },
             ),
             targets=[targets.LambdaFunction(self.ec2_fn)],
@@ -358,7 +358,7 @@ class LambdaStack(Stack):
                 detail_type=["GuardDuty Finding"],
                 detail={
                     "severity": [{"numeric": [">=", 7.0]}],
-                    "type": _ec2_type_filter(_IAM_FINDING_PREFIXES),
+                    "type": _type_prefix_filter(_IAM_FINDING_PREFIXES),
                 },
             ),
             targets=[targets.LambdaFunction(self.iam_fn)],
@@ -374,7 +374,7 @@ class LambdaStack(Stack):
                 detail_type=["GuardDuty Finding"],
                 detail={
                     "severity": [{"numeric": [">=", 7.0]}],
-                    "type": _ec2_type_filter(_S3_FINDING_PREFIXES),
+                    "type": _type_prefix_filter(_S3_FINDING_PREFIXES),
                 },
             ),
             targets=[targets.LambdaFunction(self.s3_fn)],

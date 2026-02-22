@@ -81,10 +81,17 @@ def ship_finding(finding: dict[str, Any], automated_actions: list[str] | None = 
     }
 
     logger.info("Shipping finding %s (type=%s) to Splunk HEC", finding_id, finding_type)
-    # Allow specifying a CA bundle via env var for self-signed certs; default to False for lab use
-    ssl_verify: str | bool = os.environ.get("SPLUNK_CA_BUNDLE", "false")
-    if ssl_verify.lower() == "false":
-        ssl_verify = False  # noqa: S501 — acceptable in lab; set SPLUNK_CA_BUNDLE=/path/to/ca.crt in prod
+    # Default to verifying SSL certificates.  Set SPLUNK_CA_BUNDLE to a CA bundle path for
+    # self-signed certs, or set SPLUNK_DISABLE_SSL_VERIFY=true ONLY in isolated lab environments.
+    ssl_verify: str | bool
+    ca_bundle = os.environ.get("SPLUNK_CA_BUNDLE", "")
+    if ca_bundle:
+        ssl_verify = ca_bundle
+    elif os.environ.get("SPLUNK_DISABLE_SSL_VERIFY", "").lower() == "true":
+        ssl_verify = False
+        logger.warning("SSL verification disabled for Splunk HEC — do not use in production")
+    else:
+        ssl_verify = True
     response = session.post(
         hec_url,
         json=event_payload,
