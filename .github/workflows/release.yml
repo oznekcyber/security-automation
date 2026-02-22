@@ -1,0 +1,163 @@
+name: Release — Tag, Build, Push, and Publish
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 1: Determine semantic version from conventional commits
+  # ─────────────────────────────────────────────────────────────────────────
+  version:
+    name: Determine Next Semantic Version
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.semver.outputs.new_tag }}
+      changelog: ${{ steps.semver.outputs.changelog }}
+    steps:
+      - name: Checkout repository with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next semantic version from conventional commits
+        id: semver
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          tag_prefix: "v"
+          release_branches: main,master
+          dry_run: false
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 2: Build and push Docker images to GHCR
+  # ─────────────────────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Docker Images to GHCR
+    runs-on: ubuntu-latest
+    needs: version
+    if: needs.version.outputs.new_tag != ''
+    strategy:
+      matrix:
+        phase:
+          - name: phase1-normalizer
+            context: ./phase1-normalizer
+          - name: phase2-splunk-pipeline
+            context: ./phase2-splunk-pipeline
+          - name: phase3-soar-playbook
+            context: ./phase3-soar-playbook
+          - name: phase4-integration-hub
+            context: ./phase4-integration-hub
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if Dockerfile exists for ${{ matrix.phase.name }}
+        id: dockerfile-check
+        run: |
+          if [ -f "${{ matrix.phase.context }}/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Dockerfile found for ${{ matrix.phase.name }} — skipping build"
+          fi
+
+      - name: Log in to GitHub Container Registry
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract Docker metadata (tags, labels)
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.phase.name }}
+          tags: |
+            type=raw,value=${{ needs.version.outputs.new_tag }}
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push ${{ matrix.phase.name }} image
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.phase.context }}
+          file: ${{ matrix.phase.context }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Job 3: Generate CHANGELOG and publish GitHub Release
+  # ─────────────────────────────────────────────────────────────────────────
+  release:
+    name: Create GitHub Release with CHANGELOG
+    runs-on: ubuntu-latest
+    needs: [version, build-and-push]
+    if: always() && needs.version.outputs.new_tag != ''
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate CHANGELOG from conventional commits
+        id: changelog
+        uses: requarks/changelog-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ needs.version.outputs.new_tag }}
+        continue-on-error: true
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.version.outputs.new_tag }}
+          name: Release ${{ needs.version.outputs.new_tag }}
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.changes || needs.version.outputs.changelog }}
+
+            ## Docker Images
+
+            The following images were published to GHCR:
+
+            | Phase | Image |
+            |-------|-------|
+            | Phase 1 — Alert Normalizer | `ghcr.io/${{ env.OWNER }}/phase1-normalizer:${{ needs.version.outputs.new_tag }}` |
+            | Phase 2 — Splunk Pipeline | `ghcr.io/${{ env.OWNER }}/phase2-splunk-pipeline:${{ needs.version.outputs.new_tag }}` |
+            | Phase 3 — SOAR Playbook | `ghcr.io/${{ env.OWNER }}/phase3-soar-playbook:${{ needs.version.outputs.new_tag }}` |
+            | Phase 4 — Integration Hub | `ghcr.io/${{ env.OWNER }}/phase4-integration-hub:${{ needs.version.outputs.new_tag }}` |
+
+            ## Pull the full stack
+
+            ```bash
+            docker compose -f docker-compose.full-stack.yml pull
+            docker compose -f docker-compose.full-stack.yml up -d
+            ```
+          makeLatest: true
+          generateReleaseNotes: false
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,132 @@
+version: 2
+updates:
+  # ── GitHub Actions ─────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # ── Phase 1 — Security Alert Normalizer ────────────────────────────────
+  - package-ecosystem: pip
+    directory: /phase1-normalizer
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - phase1
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+
+  # ── Phase 2 — Splunk Log Ingestion Pipeline ────────────────────────────
+  - package-ecosystem: pip
+    directory: /phase2-splunk-pipeline
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - phase2
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+
+  # ── Phase 3 — SOAR Incident Response Playbook ─────────────────────────
+  - package-ecosystem: pip
+    directory: /phase3-soar-playbook
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - phase3
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+
+  # ── Phase 4 — API Integration Hub ─────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /phase4-integration-hub
+    schedule:
+      interval: weekly
+      day: tuesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - phase4
+    commit-message:
+      prefix: "chore(deps)"
+    open-pull-requests-limit: 10
+
+  # ── Docker base images ─────────────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: /phase1-normalizer
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: docker
+    directory: /phase2-splunk-pipeline
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: docker
+    directory: /phase3-soar-playbook
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: docker
+    directory: /phase4-integration-hub
+    schedule:
+      interval: weekly
+      day: wednesday
+      time: "09:00"
+      timezone: UTC
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(deps)"

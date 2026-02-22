@@ -82,9 +82,7 @@ def send_webhook(
     session = _build_session(max_retries, backoff_factor)
     headers = {"Content-Type": "application/json"}
 
-    logger.info(
-        "POSTing %d alert(s) to webhook %s", len(alerts), webhook_url
-    )
+    logger.info("POSTing %d alert(s) to webhook %s", len(alerts), webhook_url)
 
     for attempt in range(max_retries + 1):
         try:
@@ -95,9 +93,7 @@ def send_webhook(
                 timeout=timeout,
             )
         except requests.exceptions.Timeout:
-            logger.warning(
-                "Webhook POST timed out (attempt %d/%d)", attempt + 1, max_retries + 1
-            )
+            logger.warning("Webhook POST timed out (attempt %d/%d)", attempt + 1, max_retries + 1)
             if attempt < max_retries:
                 time.sleep(backoff_factor ** (attempt + 1))
             continue

@@ -1,27 +1,14 @@
-# Security Tool Integration Hub (Phase 4)
+# Phase 4 — API Integration Hub (FastAPI)
 
-Bidirectional API middleware between **CrowdStrike Falcon** and **TheHive 5**.
+A FastAPI-based integration hub that exposes a unified REST API across all
+security automation phases, with OpenAPI documentation and JWT authentication.
 
-## Architecture
-
-```
-CrowdStrike Falcon <---------------------------------------------> TheHive 5
-        |                                                               |
-        |  webhook / poll                             webhook / API    |
-        v                                                               v
- +-----------------------------------------------------------------------+
- |                    Security Integration Hub                           |
- |                                                                       |
- |  /api/v1/webhooks/crowdstrike    /api/v1/webhooks/thehive            |
- |  /api/v1/sync/manual             /api/v1/sync/status                 |
- |  /api/v1/health                                                       |
- |                                                                       |
- |  CrowdStrikeService --transformer--> TheHiveService                  |
- |  TheHiveService     --transformer--> CrowdStrikeService               |
- |                                                                       |
- |  CircuitBreaker   RetryWithBackoff   StructuredLogging                |
- +-----------------------------------------------------------------------+
-```
+## Features
+- Unified REST API for all phases
+- JWT-based authentication
+- OpenAPI/Swagger UI documentation
+- Rate limiting and request logging
+- Health check and metrics endpoints
 
 ## Quick Start
 

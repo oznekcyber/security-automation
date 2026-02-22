@@ -94,9 +94,7 @@ def fetch_ip_report(ip: str, cfg: Config, max_age_days: int = 90) -> dict[str, A
             try:
                 return resp.json()
             except ValueError as exc:
-                raise ValueError(
-                    f"AbuseIPDB returned non-JSON body for {ip}: {exc}"
-                ) from exc
+                raise ValueError(f"AbuseIPDB returned non-JSON body for {ip}: {exc}") from exc
 
         if resp.status_code == 429:
             retry_after = int(resp.headers.get("Retry-After", 60))
@@ -111,19 +109,14 @@ def fetch_ip_report(ip: str, cfg: Config, max_age_days: int = 90) -> dict[str, A
             continue
 
         if resp.status_code in (401, 403):
-            raise PermissionError(
-                f"AbuseIPDB API key rejected (HTTP {resp.status_code})."
-            )
+            raise PermissionError(f"AbuseIPDB API key rejected (HTTP {resp.status_code}).")
 
         if resp.status_code == 422:
-            logger.warning(
-                "AbuseIPDB rejected %s as invalid (HTTP 422) — skipping", ip
-            )
+            logger.warning("AbuseIPDB rejected %s as invalid (HTTP 422) — skipping", ip)
             return {}
 
         resp.raise_for_status()
 
     raise RuntimeError(
-        f"AbuseIPDB request for {ip} failed after {cfg.max_retries + 1} "
-        "attempts (rate-limited)"
+        f"AbuseIPDB request for {ip} failed after {cfg.max_retries + 1} attempts (rate-limited)"
     )

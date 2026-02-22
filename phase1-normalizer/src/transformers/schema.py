@@ -71,13 +71,7 @@ class AnalysisStats:
 
     @property
     def total_engines(self) -> int:
-        return (
-            self.malicious
-            + self.suspicious
-            + self.harmless
-            + self.undetected
-            + self.timeout
-        )
+        return self.malicious + self.suspicious + self.harmless + self.undetected + self.timeout
 
     @property
     def detection_rate(self) -> float:
@@ -120,9 +114,7 @@ class NormalizedAlert:
 
     # Set automatically if not provided
     alert_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     threat_score: int = 0
     verdict: Verdict = Verdict.UNKNOWN

@@ -52,6 +52,7 @@ logger = get_logger(__name__)
 # Verdict helpers
 # ---------------------------------------------------------------------------
 
+
 def _score_to_verdict(score: int) -> Verdict:
     if score >= 70:
         return Verdict.MALICIOUS
@@ -75,6 +76,7 @@ def _parse_vt_epoch(epoch: Optional[int]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # VirusTotal normalizer
 # ---------------------------------------------------------------------------
+
 
 def normalize_virustotal(
     raw: dict[str, Any],
@@ -164,7 +166,7 @@ def normalize_virustotal(
     if indicator_type == IndicatorType.IP:
         country_code = attrs.get("country")
         geo = GeoInfo(
-            country=None,        # VT doesn't provide the full country name
+            country=None,  # VT doesn't provide the full country name
             country_code=country_code,
             asn=attrs.get("asn"),
             as_owner=attrs.get("as_owner"),
@@ -201,6 +203,7 @@ def normalize_virustotal(
 # ---------------------------------------------------------------------------
 # AbuseIPDB normalizer
 # ---------------------------------------------------------------------------
+
 
 def normalize_abuseipdb(
     raw: dict[str, Any],
@@ -294,6 +297,7 @@ def normalize_abuseipdb(
 # JQ filtering
 # ---------------------------------------------------------------------------
 
+
 def apply_jq_filter(alerts: list[dict], jq_expression: str) -> Any:
     """
     Apply a jq filter expression to a list of normalized alert dicts.
@@ -337,9 +341,7 @@ def apply_jq_filter(alerts: list[dict], jq_expression: str) -> Any:
             return result[0]
         return result
     except Exception as exc:  # jq raises generic Exception on runtime errors
-        raise RuntimeError(
-            f"jq evaluation failed for expression '{jq_expression}': {exc}"
-        ) from exc
+        raise RuntimeError(f"jq evaluation failed for expression '{jq_expression}': {exc}") from exc
 
 
 def serialize_alerts(alerts: list[NormalizedAlert]) -> str:

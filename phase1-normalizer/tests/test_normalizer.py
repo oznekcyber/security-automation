@@ -28,10 +28,10 @@ from src.transformers.normalizer import (
     serialize_alerts,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures — realistic mock API responses
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def vt_ip_malicious() -> dict:
@@ -169,6 +169,7 @@ def abuse_ip_clean() -> dict:
 # NormalizedAlert schema tests
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizedAlertSchema:
     def test_default_verdict_is_unknown(self):
         alert = NormalizedAlert(
@@ -185,6 +186,7 @@ class TestNormalizedAlertSchema:
             source=AlertSource.VIRUSTOTAL,
         )
         import uuid
+
         uuid.UUID(alert.alert_id)  # raises if not a valid UUID
 
     def test_to_dict_produces_string_enums(self):
@@ -213,6 +215,7 @@ class TestNormalizedAlertSchema:
 # ---------------------------------------------------------------------------
 # VirusTotal normalizer tests
 # ---------------------------------------------------------------------------
+
 
 class TestNormalizeVirusTotal:
     def test_malicious_ip_verdict(self, vt_ip_malicious):
@@ -309,6 +312,7 @@ class TestNormalizeVirusTotal:
 # AbuseIPDB normalizer tests
 # ---------------------------------------------------------------------------
 
+
 class TestNormalizeAbuseIPDB:
     def test_malicious_ip_verdict(self, abuse_ip_malicious):
         alert = normalize_abuseipdb(abuse_ip_malicious, "185.220.101.1")
@@ -359,6 +363,7 @@ class TestNormalizeAbuseIPDB:
 # Serialization tests
 # ---------------------------------------------------------------------------
 
+
 class TestSerialization:
     def test_to_dict_is_json_serializable(self, vt_ip_malicious):
         alert = normalize_virustotal(vt_ip_malicious, "185.220.101.1", IndicatorType.IP)
@@ -385,6 +390,7 @@ class TestSerialization:
 # ---------------------------------------------------------------------------
 # JQ filtering tests
 # ---------------------------------------------------------------------------
+
 
 class TestJQFilter:
     def _make_alerts(self, vt_ip_malicious, abuse_ip_clean):

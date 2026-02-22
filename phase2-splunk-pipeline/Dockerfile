@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 
-LABEL org.opencontainers.image.title="API Integration Hub" \
-      org.opencontainers.image.description="Phase 4 — FastAPI integration hub for security automation APIs" \
+LABEL org.opencontainers.image.title="Splunk Log Ingestion Pipeline" \
+      org.opencontainers.image.description="Phase 2 — Splunk HEC log ingestion and normalization pipeline" \
       org.opencontainers.image.source="https://github.com/oznekcyber/security-automation"
 
 RUN groupadd --gid 1001 appgroup \
@@ -28,7 +28,5 @@ COPY --chown=appuser:appgroup . .
 
 USER appuser
 
-EXPOSE 8000
-
-ENTRYPOINT ["uvicorn"]
-CMD ["main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["python"]
+CMD ["main.py"]

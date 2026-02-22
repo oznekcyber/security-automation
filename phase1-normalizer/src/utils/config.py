@@ -62,19 +62,13 @@ def load_config(**overrides) -> Config:
         virustotal_api_key=vt_key,
         abuseipdb_api_key=abuse_key,
         webhook_url=overrides.get("webhook_url") or os.getenv("WEBHOOK_URL", ""),
-        request_timeout=int(
-            overrides.get("request_timeout") or os.getenv("REQUEST_TIMEOUT", 30)
-        ),
-        max_retries=int(
-            overrides.get("max_retries") or os.getenv("MAX_RETRIES", 3)
-        ),
+        request_timeout=int(overrides.get("request_timeout") or os.getenv("REQUEST_TIMEOUT", 30)),
+        max_retries=int(overrides.get("max_retries") or os.getenv("MAX_RETRIES", 3)),
         retry_backoff_factor=float(
-            overrides.get("retry_backoff_factor")
-            or os.getenv("RETRY_BACKOFF_FACTOR", 1.5)
+            overrides.get("retry_backoff_factor") or os.getenv("RETRY_BACKOFF_FACTOR", 1.5)
         ),
-        output_file=overrides.get("output_file") or os.getenv(
-            "OUTPUT_FILE", "normalized_alerts.json"
-        ),
+        output_file=overrides.get("output_file")
+        or os.getenv("OUTPUT_FILE", "normalized_alerts.json"),
         ip_addresses=overrides.get("ip_addresses", []),
         file_hashes=overrides.get("file_hashes", []),
     )
